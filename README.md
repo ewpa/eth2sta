@@ -11,6 +11,9 @@
 
 The similarities on MAC layer between Ethernet and Wi-Fi make it easy to forward packets from Ethernet to Wi-Fi and vice versa. This example illustrates how to implement a simple "router" which only supports forwarding packets between Ethernet port and Wi-Fi AP interface. In this case, the Ethernet should play the role of WAN (i.e. it can access outside network) so that a mobile device could get access to the Internet when it gets connected to ESP32 through Wi-Fi.
 
+This is explained very clearly at the following website.
+[ESP32 application practice: ethernet to WiFi implementation](https://blog.actorsfit.com/a?ID=00600-f2eba9d2-7973-4a57-8fd2-ae8dd0e7a066)
+
 **Note:** In this example, ESP32 works like a *bridge* between Ethernet and Wi-Fi, and it won't perform any actions on Layer3 and higher layer, which means there's no need to initialize the TCP/IP stack.
 
 ## How to use example

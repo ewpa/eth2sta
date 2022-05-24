@@ -197,13 +197,13 @@ menu "Example Configuration"
         string "Wi-Fi SSID"
         default "eth2ap"
         help
-            Set the SSID of Wi-Fi ap interface.
+            Set the SSID of Wi-Fi AP/STA interface.
 
     config EXAMPLE_WIFI_PASSWORD
         string "Wi-Fi Password"
         default "12345678"
         help
-            Set the password of Wi-Fi ap interface.
+            Set the password of Wi-Fi AP/STA interface.
 
     config EXAMPLE_WIFI_CHANNEL
         int "WiFi channel"
@@ -218,4 +218,34 @@ menu "Example Configuration"
         help
             Maximum number of the station that allowed to connect to current Wi-Fi hotspot.
 
+    config EXAMPLE_USE_STATUS_LED
+        bool "Enable status LEDs"
+        help
+            Enable status LEDs and configure LED GPIO numbers.
+
+    if EXAMPLE_USE_STATUS_LED
+        config EXAMPLE_STATUS_MAC_GPIO
+            int "MAC status GPIO number"
+            range 0 EXAMPLE_GPIO_RANGE_MAX
+            default 5
+            help
+                Set the GPIO number used to set HIGH to illuminate an LED
+                indicating the Ethernet MAC address has been aquired.
+
+        config EXAMPLE_STATUS_STA_UP_GPIO
+            int "WiFi STA up GPIO number"
+            range 0 EXAMPLE_GPIO_RANGE_MAX
+            default 14 
+            help
+                Set the GPIO number used to set HIGH to illuminate an LED
+                indicating the WiFi STA is connected successfully.
+
+        config EXAMPLE_STATUS_STA_DOWN_GPIO
+            int "WiFi STA down GPIO number"
+            range 0 EXAMPLE_GPIO_RANGE_MAX
+            default 13
+            help
+                Set the GPIO number used to set HIGH to illuminate an LED
+                indicating the WiFi STA is NOT connected.
+    endif # EXAMPLE_USE_STATUS_LED
 endmenu

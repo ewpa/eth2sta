@@ -28,6 +28,7 @@ static esp_eth_handle_t s_eth_handle = NULL;
 static xQueueHandle flow_control_queue = NULL;
 static bool s_sta_is_connected = false;
 static bool s_ethernet_is_connected = false;
+static bool s_mac_is_set = false;
 static uint8_t s_eth_mac[6];
 
 #define FLOW_CONTROL_QUEUE_TIMEOUT_MS (100)
@@ -38,6 +39,19 @@ typedef struct {
     void *packet;
     uint16_t length;
 } flow_control_msg_t;
+
+static void ethernet2wifi_mac_status_set(bool status)
+{
+    s_mac_is_set = status;
+#ifdef CONFIG_EXAMPLE_USE_STATUS_LED
+    ESP_ERROR_CHECK(gpio_set_level(CONFIG_EXAMPLE_STATUS_MAC_GPIO, status));
+#endif
+}
+
+static bool ethernet2wifi_mac_status_get(void)
+{
+    return s_mac_is_set;
+}
 
 // Forward packets from Wi-Fi to Ethernet
 static esp_err_t pkt_wifi2eth(void *buffer, uint16_t len, void *eb)
@@ -79,11 +93,18 @@ static void eth2wifi_flow_control_task(void *args)
     while (1) {
         if (xQueueReceive(flow_control_queue, &msg, pdMS_TO_TICKS(FLOW_CONTROL_QUEUE_TIMEOUT_MS)) == pdTRUE) {
             timeout = 0;
-            if (s_sta_is_connected && msg.length) {
+            if (msg.length) {
                 do {
+                    if (!ethernet2wifi_mac_status_get()) {
+                        memcpy(s_eth_mac, (uint8_t*)msg.packet + 6, sizeof(s_eth_mac));
+                        ESP_ERROR_CHECK(esp_wifi_start());
+                        esp_wifi_set_mac(WIFI_IF_STA, s_eth_mac);
+                        esp_wifi_connect();
+                        ethernet2wifi_mac_status_set(true);
+                    }
                     vTaskDelay(pdMS_TO_TICKS(timeout));
                     timeout += 2;
-                    res = esp_wifi_internal_tx(WIFI_IF_AP, msg.packet, msg.length);
+                    res = esp_wifi_internal_tx(WIFI_IF_STA, msg.packet, msg.length);
                 } while (res && timeout < FLOW_CONTROL_WIFI_SEND_TIMEOUT_MS);
                 if (res != ESP_OK) {
                     ESP_LOGE(TAG, "WiFi send packet failed: %d", res);
@@ -104,11 +125,10 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "Ethernet Link Up");
         s_ethernet_is_connected = true;
         esp_eth_ioctl(s_eth_handle, ETH_CMD_G_MAC_ADDR, s_eth_mac);
-        esp_wifi_set_mac(WIFI_IF_AP, s_eth_mac);
-        ESP_ERROR_CHECK(esp_wifi_start());
         break;
     case ETHERNET_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "Ethernet Link Down");
+        ethernet2wifi_mac_status_set(false);
         s_ethernet_is_connected = false;
         ESP_ERROR_CHECK(esp_wifi_stop());
         break;
@@ -129,21 +149,33 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 {
     static uint8_t s_con_cnt = 0;
     switch (event_id) {
-    case WIFI_EVENT_AP_STACONNECTED:
-        ESP_LOGI(TAG, "Wi-Fi AP got a station connected");
+    case WIFI_EVENT_STA_START:
+        esp_wifi_connect();
+        break;
+    case WIFI_EVENT_STA_CONNECTED:
+        ESP_LOGI(TAG, "Wi-Fi station connected");
         if (!s_con_cnt) {
             s_sta_is_connected = true;
-            esp_wifi_internal_reg_rxcb(WIFI_IF_AP, pkt_wifi2eth);
+            esp_wifi_internal_reg_rxcb(WIFI_IF_STA, pkt_wifi2eth);
         }
         s_con_cnt++;
+#ifdef CONFIG_EXAMPLE_USE_STATUS_LED
+        ESP_ERROR_CHECK(gpio_set_level(CONFIG_EXAMPLE_STATUS_STA_DOWN_GPIO, 0));
+        ESP_ERROR_CHECK(gpio_set_level(CONFIG_EXAMPLE_STATUS_STA_UP_GPIO, 1));
+#endif
         break;
-    case WIFI_EVENT_AP_STADISCONNECTED:
-        ESP_LOGI(TAG, "Wi-Fi AP got a station disconnected");
+    case WIFI_EVENT_STA_DISCONNECTED:
+        ESP_LOGI(TAG, "Wi-Fi station disconnected");
         s_con_cnt--;
         if (!s_con_cnt) {
             s_sta_is_connected = false;
-            esp_wifi_internal_reg_rxcb(WIFI_IF_AP, NULL);
+            esp_wifi_internal_reg_rxcb(WIFI_IF_STA, NULL);
         }
+#ifdef CONFIG_EXAMPLE_USE_STATUS_LED
+        ESP_ERROR_CHECK(gpio_set_level(CONFIG_EXAMPLE_STATUS_STA_DOWN_GPIO, 1));
+        ESP_ERROR_CHECK(gpio_set_level(CONFIG_EXAMPLE_STATUS_STA_UP_GPIO, 0));
+#endif
+        esp_wifi_connect();
         break;
     default:
         break;
@@ -254,20 +286,14 @@ static void initialize_wifi(void)
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     wifi_config_t wifi_config = {
-        .ap = {
+        .sta = {
             .ssid = CONFIG_EXAMPLE_WIFI_SSID,
-            .ssid_len = strlen(CONFIG_EXAMPLE_WIFI_SSID),
             .password = CONFIG_EXAMPLE_WIFI_PASSWORD,
-            .max_connection = CONFIG_EXAMPLE_MAX_STA_CONN,
-            .authmode = WIFI_AUTH_WPA_WPA2_PSK,
-            .channel = CONFIG_EXAMPLE_WIFI_CHANNEL // default: channel 1
+            .threshold.authmode = WIFI_AUTH_WPA2_PSK
         },
     };
-    if (strlen(CONFIG_EXAMPLE_WIFI_PASSWORD) == 0) {
-        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
-    }
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
 }
 
 static esp_err_t initialize_flow_control(void)
@@ -285,6 +311,18 @@ static esp_err_t initialize_flow_control(void)
     return ESP_OK;
 }
 
+#ifdef CONFIG_EXAMPLE_USE_STATUS_LED
+static void initialize_gpio(void)
+{
+    static gpio_config_t conf = { .pin_bit_mask = ((1ULL<<CONFIG_EXAMPLE_STATUS_MAC_GPIO)|(1ULL<<CONFIG_EXAMPLE_STATUS_STA_DOWN_GPIO)|(1ULL<<CONFIG_EXAMPLE_STATUS_STA_UP_GPIO)), .mode = GPIO_MODE_DEF_OUTPUT };
+
+    ESP_ERROR_CHECK(gpio_config(&conf));
+    ESP_ERROR_CHECK(gpio_set_level(CONFIG_EXAMPLE_STATUS_MAC_GPIO, 0));
+    ESP_ERROR_CHECK(gpio_set_level(CONFIG_EXAMPLE_STATUS_STA_DOWN_GPIO, 1));
+    ESP_ERROR_CHECK(gpio_set_level(CONFIG_EXAMPLE_STATUS_STA_UP_GPIO, 0));
+}
+#endif
+
 void app_main(void)
 {
     esp_err_t ret = nvs_flash_init();
@@ -295,6 +333,9 @@ void app_main(void)
     ESP_ERROR_CHECK(ret);
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     ESP_ERROR_CHECK(initialize_flow_control());
+#ifdef CONFIG_EXAMPLE_USE_STATUS_LED
+    initialize_gpio();
+#endif
     initialize_wifi();
     initialize_ethernet();
 }
