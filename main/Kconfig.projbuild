@@ -195,28 +195,15 @@ menu "Example Configuration"
 
     config EXAMPLE_WIFI_SSID
         string "Wi-Fi SSID"
-        default "eth2ap"
+        default "internet"
         help
-            Set the SSID of Wi-Fi AP/STA interface.
+            Set the SSID of remote Wi-Fi AP.
 
     config EXAMPLE_WIFI_PASSWORD
         string "Wi-Fi Password"
         default "12345678"
         help
-            Set the password of Wi-Fi AP/STA interface.
-
-    config EXAMPLE_WIFI_CHANNEL
-        int "WiFi channel"
-        range 1 13
-        default 1
-        help
-            Set the channel of Wi-Fi ap.
-
-    config EXAMPLE_MAX_STA_CONN
-        int "Maximum STA connections"
-        default 4
-        help
-            Maximum number of the station that allowed to connect to current Wi-Fi hotspot.
+            Set the password of remote Wi-Fi AP.
 
     config EXAMPLE_USE_STATUS_LED
         bool "Enable status LEDs"
@@ -229,23 +216,23 @@ menu "Example Configuration"
             range 0 EXAMPLE_GPIO_RANGE_MAX
             default 5
             help
-                Set the GPIO number used to set HIGH to illuminate an LED
-                indicating the Ethernet MAC address has been aquired.
+                Set the GPIO number used to set HIGH to illuminate an LED indicating the
+                Ethernet MAC address has been acquired.
 
         config EXAMPLE_STATUS_STA_UP_GPIO
             int "WiFi STA up GPIO number"
             range 0 EXAMPLE_GPIO_RANGE_MAX
             default 14 
             help
-                Set the GPIO number used to set HIGH to illuminate an LED
-                indicating the WiFi STA is connected successfully.
+                Set the GPIO number used to set HIGH to illuminate an LED indicating the
+                WiFi STA is connected successfully.
 
         config EXAMPLE_STATUS_STA_DOWN_GPIO
             int "WiFi STA down GPIO number"
             range 0 EXAMPLE_GPIO_RANGE_MAX
             default 13
             help
-                Set the GPIO number used to set HIGH to illuminate an LED
-                indicating the WiFi STA is NOT connected.
+                Set the GPIO number used to set HIGH to illuminate an LED indicating the
+                WiFi STA is NOT connected.
     endif # EXAMPLE_USE_STATUS_LED
 endmenu

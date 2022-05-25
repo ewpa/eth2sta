@@ -3,6 +3,6 @@
 # project subdirectory.
 #
 
-PROJECT_NAME := eth2ap
+PROJECT_NAME := eth2sta
 
 include $(IDF_PATH)/make/project.mk

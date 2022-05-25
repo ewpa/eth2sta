@@ -1,4 +1,4 @@
-/* eth2ap (Ethernet to Wi-Fi AP packet forwarding) Example
+/* eth2sta (Ethernet to Wi-Fi STA packet forwarding) Example
 
    This example code is in the Public Domain (or CC0 licensed, at your option.)
 
@@ -23,7 +23,7 @@
 #include "driver/spi_master.h"
 #endif
 
-static const char *TAG = "eth_example";
+static const char *TAG = "eth2sta";
 static esp_eth_handle_t s_eth_handle = NULL;
 static xQueueHandle flow_control_queue = NULL;
 static bool s_sta_is_connected = false;
@@ -147,30 +147,27 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base,
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
 {
-    static uint8_t s_con_cnt = 0;
     switch (event_id) {
     case WIFI_EVENT_STA_START:
+        ESP_LOGI(TAG, "WiFi Started");
         esp_wifi_connect();
         break;
+    case WIFI_EVENT_STA_STOP:
+        ESP_LOGI(TAG, "WiFi Stopped");
+        break;
     case WIFI_EVENT_STA_CONNECTED:
-        ESP_LOGI(TAG, "Wi-Fi station connected");
-        if (!s_con_cnt) {
-            s_sta_is_connected = true;
-            esp_wifi_internal_reg_rxcb(WIFI_IF_STA, pkt_wifi2eth);
-        }
-        s_con_cnt++;
+        ESP_LOGI(TAG, "WiFi Link Up");
+        s_sta_is_connected = true;
+        esp_wifi_internal_reg_rxcb(WIFI_IF_STA, pkt_wifi2eth);
 #ifdef CONFIG_EXAMPLE_USE_STATUS_LED
         ESP_ERROR_CHECK(gpio_set_level(CONFIG_EXAMPLE_STATUS_STA_DOWN_GPIO, 0));
         ESP_ERROR_CHECK(gpio_set_level(CONFIG_EXAMPLE_STATUS_STA_UP_GPIO, 1));
 #endif
         break;
     case WIFI_EVENT_STA_DISCONNECTED:
-        ESP_LOGI(TAG, "Wi-Fi station disconnected");
-        s_con_cnt--;
-        if (!s_con_cnt) {
-            s_sta_is_connected = false;
-            esp_wifi_internal_reg_rxcb(WIFI_IF_STA, NULL);
-        }
+        ESP_LOGI(TAG, "WiFi Link Down");
+        s_sta_is_connected = false;
+        esp_wifi_internal_reg_rxcb(WIFI_IF_STA, NULL);
 #ifdef CONFIG_EXAMPLE_USE_STATUS_LED
         ESP_ERROR_CHECK(gpio_set_level(CONFIG_EXAMPLE_STATUS_STA_DOWN_GPIO, 1));
         ESP_ERROR_CHECK(gpio_set_level(CONFIG_EXAMPLE_STATUS_STA_UP_GPIO, 0));
